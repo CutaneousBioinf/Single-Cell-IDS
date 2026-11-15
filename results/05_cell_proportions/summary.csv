@@ -1,0 +1,31 @@
+gene_sets,tissue,comparison,lanes,measure,donors_a,donors_b,cell_types,tests,raw_p_below_0_05,significant,significant_and_min_difference,per_100_tests,min_difference,largest_abs_difference,smallest_possible_p
+285 random gene sets,blood,Healthy vs PSO,runs 02-05 (16 lanes),mean_score,20,17,4,1140,95,0,0,0.0,0.2,0.11,1.2574370556669729e-10
+57 programs,blood,Healthy vs PSO,runs 02-05 (16 lanes),mean_score,20,17,4,228,21,0,0,0.0,0.2,0.204,1.2574370556669729e-10
+285 random gene sets,blood,Healthy vs PSO,runs 02-05 (16 lanes),share_0,20,17,4,1140,82,0,0,0.0,0.1,0.092,1.2574370556669729e-10
+57 programs,blood,Healthy vs PSO,runs 02-05 (16 lanes),share_0,20,17,4,228,21,0,0,0.0,0.1,0.087,1.2574370556669729e-10
+285 random gene sets,blood,Healthy vs PSO,runs 02-05 (16 lanes),share_0.2,20,17,4,1140,61,0,0,0.0,0.1,0.085,1.2574370556669729e-10
+57 programs,blood,Healthy vs PSO,runs 02-05 (16 lanes),share_0.2,20,17,4,228,17,0,0,0.0,0.1,0.107,1.2574370556669729e-10
+285 random gene sets,blood,PSO vs PSA,runs 06-07 (8 lanes),mean_score,7,17,4,1140,57,0,0,0.0,0.2,0.066,5.778609897603032e-06
+57 programs,blood,PSO vs PSA,runs 06-07 (8 lanes),mean_score,7,17,4,228,15,0,0,0.0,0.2,0.171,5.778609897603032e-06
+285 random gene sets,blood,PSO vs PSA,runs 06-07 (8 lanes),share_0,7,17,4,1140,52,0,0,0.0,0.1,0.141,5.778609897603032e-06
+57 programs,blood,PSO vs PSA,runs 06-07 (8 lanes),share_0,7,17,4,228,11,0,0,0.0,0.1,0.137,5.778609897603032e-06
+285 random gene sets,blood,PSO vs PSA,runs 06-07 (8 lanes),share_0.2,7,17,4,1140,42,0,0,0.0,0.1,0.07,5.778609897603032e-06
+57 programs,blood,PSO vs PSA,runs 06-07 (8 lanes),share_0.2,7,17,4,228,5,0,0,0.0,0.1,0.094,5.778609897603032e-06
+285 random gene sets,skin,NS vs PN,all samples,mean_score,7,10,7,1995,378,0,0,0.0,0.2,0.304,0.00010283833813245579
+57 programs,skin,NS vs PN,all samples,mean_score,7,10,7,399,143,69,3,0.8,0.2,0.484,0.00010283833813245579
+285 random gene sets,skin,NS vs PN,all samples,share_0,7,10,7,1995,381,0,0,0.0,0.1,0.343,0.00010283833813245579
+57 programs,skin,NS vs PN,all samples,share_0,7,10,7,399,63,0,0,0.0,0.1,0.512,0.00010283833813245579
+285 random gene sets,skin,NS vs PN,all samples,share_0.2,7,10,7,1995,208,0,0,0.0,0.1,0.351,0.00010283833813245579
+57 programs,skin,NS vs PN,all samples,share_0.2,7,10,7,399,46,0,0,0.0,0.1,0.382,0.00010283833813245579
+285 random gene sets,skin,NS vs PP,all samples,mean_score,7,13,7,1995,735,427,33,1.7,0.2,1.215,2.5799793601651186e-05
+57 programs,skin,NS vs PP,all samples,mean_score,7,13,7,399,215,180,43,10.8,0.2,2.254,2.5799793601651186e-05
+285 random gene sets,skin,NS vs PP,all samples,share_0,7,13,7,1995,659,316,235,11.8,0.1,0.801,2.5799793601651186e-05
+57 programs,skin,NS vs PP,all samples,share_0,7,13,7,399,152,116,73,18.3,0.1,0.97,2.5799793601651186e-05
+285 random gene sets,skin,NS vs PP,all samples,share_0.2,7,13,7,1995,423,124,75,3.8,0.1,0.75,2.5799793601651186e-05
+57 programs,skin,NS vs PP,all samples,share_0.2,7,13,7,399,122,67,42,10.5,0.1,0.949,2.5799793601651186e-05
+285 random gene sets,skin,PN vs PP,donors with both,mean_score,9,9,7,1995,402,0,0,0.0,0.2,0.997,0.00390625
+57 programs,skin,PN vs PP,donors with both,mean_score,9,9,7,399,129,0,0,0.0,0.2,1.921,0.00390625
+285 random gene sets,skin,PN vs PP,donors with both,share_0,9,9,7,1995,364,0,0,0.0,0.1,0.65,0.00390625
+57 programs,skin,PN vs PP,donors with both,share_0,9,9,7,399,91,0,0,0.0,0.1,0.834,0.00390625
+285 random gene sets,skin,PN vs PP,donors with both,share_0.2,9,9,7,1995,231,0,0,0.0,0.1,0.626,0.00390625
+57 programs,skin,PN vs PP,donors with both,share_0.2,9,9,7,399,86,0,0,0.0,0.1,0.835,0.00390625

@@ -23,6 +23,6 @@ _archive/
 # --- Regenerable IDS matrices ---
 *.npy
 
-# --- Per-lane data files and score tables: rebuilt in minutes by scripts/04_method_checks ---
+# --- Per-lane / per-sample data files (scripts/02_ids_programs/build_units.py) and stage 04 score tables: rebuilt in minutes ---
 results/00_units/
 results/04_method_checks/scores_*.csv.gz

@@ -15,8 +15,12 @@ IDS itself is never reimplemented here.
 
 Settings behind the 194 catalogue detections (recovered by reproducing them gene for gene):
   cap 4000, floor 0.02, seed 0, norm "panel", nine blood lanes (LANES_USED), and MIN_IDS below.
+
+Which strata a run covers is the `strata` argument, {name: (dataset, disease value)}. Left out, it is the
+six catalogue strata (STRATA). For any other dataset, dataset_strata() reads one stratum per disease value
+from the data, so nothing about a new dataset is written in code.
 """
-import json, os
+import json, os, re
 import numpy as np, pandas as pd, scipy.sparse as sp
 from . import units, programs as P
 from .lineage import LINEAGE
@@ -54,6 +58,15 @@ MLANA PMEL TYRP1 DCT TYR
 _CELLS = {}
 
 
+def dataset_strata(names):
+    """One stratum per disease value of each dataset, read from the data: {'<dataset>_<disease>': (dataset, disease)}."""
+    out = {}
+    for n in names:
+        for d in sorted(units.cells(n).disease_fine.unique()):
+            out[f"{n}_{re.sub(r'[^A-Za-z0-9.+-]+', '-', d)}"] = (n, d)
+    return out
+
+
 def tissue_cells(tissue, lanes=None):
     """Cell table of a tissue. Blood defaults to the nine October lanes; pass lanes='all' for every lane."""
     key = (tissue, "all" if lanes == "all" else tuple(lanes or LANES_USED))
@@ -65,13 +78,17 @@ def tissue_cells(tissue, lanes=None):
     return _CELLS[key]
 
 
-def stratum_cells(lineage, stratum, lanes=None):
-    """(tissue, cells) of one stratum, optionally restricted to one coarse lineage ('T+NK' keeps both)."""
-    tissue, dis = STRATA[stratum]
+def stratum_cells(lineage, stratum, lanes=None, strata=None):
+    """(tissue, cells) of one stratum, optionally restricted to some cell types.
+    `lineage` as text is a coarse lineage of sc_ids.lineage ('T+NK' keeps both); as a list it is the
+    exact cell-type labels to keep, which is how a dataset with its own labels is restricted."""
+    tissue, dis = (strata or STRATA)[stratum]
     c = tissue_cells(tissue, lanes)
     m = (c.disease_fine == dis).values
-    if lineage:
+    if lineage and isinstance(lineage, str):
         m &= c.subtype.map(LINEAGE).fillna("Other").isin(set(lineage.split("+"))).values
+    elif lineage:
+        m &= c.subtype.isin(set(lineage)).values
     return tissue, c[m]
 
 
@@ -93,15 +110,16 @@ def subsample_idx(lab, cap, seed=0):
     return np.sort(np.concatenate(keep))
 
 
-def build_panel(lineage, n_hvg, out, lanes=None, verbose=True):
+def build_panel(lineage, n_hvg, out, lanes=None, verbose=True, strata=None, curated=CURATED):
     """ONE gene panel for every stratum: union of each stratum's highly variable genes (chosen among
-    genes present in both tissues) plus the curated list. Comparing programs across strata is only
-    fair if every stratum was offered the same genes."""
+    genes present in every dataset of the run) plus the curated list. Comparing programs across strata
+    is only fair if every stratum was offered the same genes."""
     import scanpy as sc, anndata as ad
-    shared = sorted(set(units.genes("blood")) & set(units.genes("skin")))
+    strata = strata or STRATA
+    shared = sorted(set.intersection(*[set(units.genes(t)) for t in sorted({t for t, _ in strata.values()})]))
     chosen, per = set(), {}
-    for s in sorted(STRATA):
-        tissue, c = stratum_cells(lineage, s, lanes)
+    for s in sorted(strata):
+        tissue, c = stratum_cells(lineage, s, lanes, strata)
         if len(c) < 200:
             if verbose:
                 print(f"  [panel] {s:<12} only {len(c)} cells in this lineage - skipped", flush=True)
@@ -116,13 +134,13 @@ def build_panel(lineage, n_hvg, out, lanes=None, verbose=True):
             print(f"  [panel] {s:<12} {sub.n_obs:>7,} cells -> {len(per[s]):,} HVGs", flush=True)
         del sub
     hvg = sorted(chosen)
-    cur = sorted((set(CURATED) & set(shared)) - chosen)
+    cur = sorted((set(curated) & set(shared)) - chosen)
     panel = sorted(chosen | set(cur))
     if out:
         pd.DataFrame({"gene": panel, "source": ["HVG" if g in chosen else "curated" for g in panel]}
                      ).to_csv(os.path.join(out, "gene_panel.csv"), index=False)
         json.dump({"panel": panel, "per_stratum_hvg": per, "curated_added": cur,
-                   "curated_absent_from_data": sorted(set(CURATED) - set(shared))},
+                   "curated_absent_from_data": sorted(set(curated) - set(shared))},
                   open(os.path.join(out, "gene_panel.json"), "w"))
     if verbose:
         print(f"  [panel] HVG union {len(hvg):,} + curated not already in it {len(cur):,} = {len(panel):,} genes", flush=True)
@@ -130,7 +148,7 @@ def build_panel(lineage, n_hvg, out, lanes=None, verbose=True):
 
 
 def compute_ids(lineage, stratum, panel, seed=0, norm="panel", cap=4000, floor=0.02,
-                min_cells=400, block_size=1024, lanes=None):
+                min_cells=400, block_size=1024, lanes=None, strata=None):
     """IDS matrix of one stratum. Returns dict(C, genes, dropped, cells), or dict(skipped=n) when the
     stratum has fewer than `min_cells` cells (IDS estimates were unstable below roughly 500-1000).
 
@@ -140,7 +158,7 @@ def compute_ids(lineage, stratum, panel, seed=0, norm="panel", cap=4000, floor=0
     import anndata as ad
     from .pipeline import preprocess, minmax_scale_sparse
     from .batched import compute_IDS_blocked
-    tissue, c = stratum_cells(lineage, stratum, lanes)
+    tissue, c = stratum_cells(lineage, stratum, lanes, strata)
     sel = c.iloc[subsample_idx(c.subtype.astype(str).values, cap, seed)]
     if len(sel) < min_cells:
         return {"skipped": int(len(sel))}
@@ -168,9 +186,9 @@ def programs_from(C, genes, min_ids, min_genes=P.PROGRAM_SIZE_MIN, max_genes=P.P
     return (t, dropped) if with_dropped else t
 
 
-def support(lineage, stratum, tbl, lanes=None):
+def support(lineage, stratum, tbl, lanes=None, strata=None):
     """How many cells of the WHOLE stratum (not the sample) detect each program's genes."""
-    tissue, c = stratum_cells(lineage, stratum, lanes)
+    tissue, c = stratum_cells(lineage, stratum, lanes, strata)
     need = sorted({g for gs in tbl["genes"] for g in gs.split(", ")})
     D = (units.read_cells(tissue, c, need) > 0).tocsc()
     pos = {g: i for i, g in enumerate(need)}

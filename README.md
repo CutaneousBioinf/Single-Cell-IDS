@@ -39,7 +39,15 @@ _archive/                 superseded files, kept for one review pass (gitignored
 Paths are defined once in `src/sc_ids/paths.py`. If the data live elsewhere, set `SC_IDS_DATA`
 (and `SC_IDS_PBMC_DIR` for the PBMC matrices) instead of editing scripts.
 
+### Adding a new dataset
+
+A dataset that comes as `matrix.mtx` + `barcodes.tsv` + `features.tsv` + a metadata `.csv` needs no code: give
+the folder, the metadata file and the column names for sample, cell type and disease. Three commands
+(build, find programs, score them) are in **`docs/new_dataset_guide.md`**.
+
 ### `datasets/` — where dataset-specific facts live
+
+Used only by the single-run path below (`python -m sc_ids.analysis`, stage 01). The new-dataset path above does not use it.
 
 A `Dataset` describes what is true of one study and nothing else: how barcodes are
 keyed, which column is the QC gate, which is the cell type, which columns define a
@@ -58,12 +66,16 @@ IDS histogram.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e .
-pip install scanpy anndata scipy "harmonypy==0.0.10" umap-learn leidenalg igraph networkx scikit-learn
+python -m pip install -e .
+python -m pip install scanpy anndata scipy "harmonypy==0.0.10" umap-learn leidenalg igraph networkx scikit-learn
+python -m pip install fast_matrix_market      # optional: reads matrix.mtx in seconds instead of minutes
 
 python -m sc_ids.pipeline            # smoke test on built-in synthetic data
-python tests/test_batched.py && python tests/test_streaming.py && python tests/test_programs.py
+python tests/test_batched.py && python tests/test_streaming.py && python tests/test_programs.py && python tests/test_new_dataset.py
 ```
+
+Install with `python -m pip`, not bare `pip`: `python -m pip` always installs into the Python that is
+running (the virtual environment once it is activated), while `pip` can still point at another installation.
 
 `sc.external.pp.harmony_integrate` is broken with harmonypy ≥ 2.0.0 — use
 `viz.run_harmony()`, which calls harmonypy directly and handles both conventions.
@@ -94,7 +106,7 @@ Scripts are numbered by stage. Each stage reads the one before it and writes onl
 | Stage | Run in this order | Writes to | What it does |
 |---|---|---|---|
 | `01_qc_labelling` | `qc_joint_pipeline` → `cluster_pipeline` → `theta_tuning` → `rank_markers` → `nk_percell`, `nk_deg_export`, `nk_deg_workbook` | `results/01_qc_labelling/` | QC both tissues, align blood and skin on a UMAP, label T/NK and myeloid sub-clusters, check the NK call. Blood: lane PBMC-01-1 only. |
-| `02_ids_programs` | `build_units` (blood, skin, then each with `--index`) → `ids_programs_disease` (whole tissue, then `--lineage T+NK`, `Myeloid`, `Keratinocyte`; each once to see the IDS percentiles, then `--reuse --min-ids`) | `results/02_ids_programs/`, data files in `results/00_units/` | Write one QC'd file per blood lane (all 28) and per skin sample, then find IDS programs in each tissue × disease stratum. The catalogue uses the nine October lanes. |
+| `02_ids_programs` | `build_units` (blood, skin, then each with `--index`) → `ids_programs_disease` (whole tissue, then `--lineage T+NK`, `Myeloid`, `Keratinocyte`; each once to see the IDS percentiles, then `--reuse --min-ids`). For any other dataset: `build_units --dataset` → `ids_programs_disease --datasets` → `program_activity` | `results/02_ids_programs/`, data files in `results/00_units/` | Write one QC'd file per blood lane (all 28) and per skin sample, then find IDS programs in each tissue × disease stratum. The catalogue uses the nine October lanes. The same scripts take a new dataset by name (`docs/new_dataset_guide.md`). |
 | `03_catalogue` | `program_catalogue` → `disease_contrasts` → `distinct_programs` → `catalogue_workbook` (`keratinocyte_detection` is independent) | `results/03_catalogue/`, `deliverables/` | Permutation test, activity score, merge 194 detections into distinct programs, donor-level disease tests, the workbook. |
 | `04_method_checks` | `validate_scoring`; `score_units` → `disease_tests`; `discovery_runs` → `discovery_compare` → `variant_blood_tests`; `permutation_runs` | `results/04_method_checks/` | The same pipeline with one choice changed at a time: all 28 lanes (more donors), subtype-level tests, other random samples / normalization / cap / threshold, 200 shuffles. Summary: `results/04_method_checks/README.md`. |
 
@@ -124,6 +136,7 @@ Computed separately from the same counts; do not conflate them.
 
 ## Docs
 
+- `docs/new_dataset_guide.md` — adding a dataset from matrix.mtx + metadata.csv: three commands, outputs, limits
 - `docs/data_inventory.md` — the PBMC lanes in use (9 of 28) and what each is for, the unused lanes, skin donors
 - `docs/abstract/abstract_notes.md` — methods, limitations and numbers behind the KSID abstract
 - `docs/notes/agenda1_and_3_results.md` — the cell-type mapping, the program-selection

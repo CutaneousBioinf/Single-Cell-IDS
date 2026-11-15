@@ -1,5 +1,6 @@
 """
-build_units.py — one QC'd file per blood lane and per skin sample (see sc_ids/units.py).
+build_units.py — one file per blood lane, per skin sample, or per sample of any new dataset
+(see sc_ids/units.py).
 
 FIRST STEP OF THE PIPELINE: every later script reads these files, one at a time, so memory is
 set by the largest single lane (about 1.5 GB) and not by how many lanes are used. The cells are
@@ -15,6 +16,10 @@ Checkpointed: a unit that already has a file is skipped, so the script can be re
   python scripts/02_ids_programs/build_units.py --tissue blood [--units PBMC-01-1,PBMC-03-1] [--budget 150]
   python scripts/02_ids_programs/build_units.py --tissue skin
   python scripts/02_ids_programs/build_units.py --tissue blood --index      # write cells_/genes_ tables
+
+Any other dataset (one matrix.mtx + barcodes.tsv + features.tsv + a metadata .csv; no QC unless asked):
+  python scripts/02_ids_programs/build_units.py --dataset NAME --matrix-dir DIR --metadata DIR/metadata.csv \
+      --sample-col patientID --celltype-col simplified_subtype --disease-col disease
 """
 import argparse, glob, gzip, os, re, sys, time, resource
 import numpy as np, pandas as pd, scipy.sparse as sp
@@ -33,20 +38,10 @@ def rss():
 
 
 def qc(X, var_names, obs):
-    mt = np.array([g.upper().startswith("MT-") for g in var_names])
-    tot = np.asarray(X.sum(axis=1)).ravel()
-    ng = np.asarray((X > 0).sum(axis=1)).ravel()
-    pct = 100 * np.asarray(X[:, mt].sum(axis=1)).ravel() / np.maximum(tot, 1)
-    keep = (ng >= MIN_GENES) & (pct <= MAX_MT)
-    obs = obs.assign(total_counts=tot, n_genes=ng, pct_mt=pct)
-    return X[keep], obs[keep]
+    return units.qc(X, var_names, obs, MIN_GENES, MAX_MT)
 
 
-def save(tissue, unit, X, var_names, obs):
-    os.makedirs(os.path.dirname(units.unit_path(tissue, unit)), exist_ok=True)
-    a = ad.AnnData(X=sp.csr_matrix(X, dtype=np.float32), obs=obs, var=pd.DataFrame(index=pd.Index(np.asarray(var_names, dtype=str), name="gene")))
-    tmp = units.unit_path(tissue, unit) + ".tmp"
-    a.write_h5ad(tmp, compression="lzf"); os.replace(tmp, units.unit_path(tissue, unit))
+save = units.write_unit
 
 
 _META = {}
@@ -132,35 +127,36 @@ def build_skin_sample(f, meta):
     return sample, n_raw, int(ok.sum())
 
 
-def write_index(tissue, order):
-    rows, g0 = [], None
-    for u in order:
-        p = units.unit_path(tissue, u)
-        if not os.path.exists(p):
-            continue
-        a = ad.read_h5ad(p, backed="r")
-        o = a.obs[["donor", "subtype", "disease_fine", "unit", "total_counts"]].copy()
-        o.insert(0, "row", np.arange(len(o))); o.insert(0, "cell", a.obs_names.values)
-        rows.append(o)
-        g = list(a.var_names)
-        assert g0 is None or g == g0, f"{u}: gene order differs"
-        g0 = g
-        a.file.close()
-    c = pd.concat(rows, ignore_index=True)
-    c.to_csv(os.path.join(units.WORK, f"cells_{tissue}.csv.gz"), index=False)
-    open(os.path.join(units.WORK, f"genes_{tissue}.txt"), "w").write("\n".join(g0) + "\n")
-    print(f"[index] {tissue}: {len(c):,} cells in {c.unit.nunique()} units, {len(g0):,} genes")
-    return c
+write_index = units.write_index
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tissue", required=True, choices=["blood", "skin"])
+    ap.add_argument("--tissue", choices=["blood", "skin"], help="one of the two catalogue datasets")
     ap.add_argument("--units", default=None)
     ap.add_argument("--budget", type=float, default=150, help="stop starting new units after this many seconds")
     ap.add_argument("--index", action="store_true")
+    g = ap.add_argument_group("any other dataset (docs/new_dataset_guide.md)")
+    g.add_argument("--dataset", help="a name you choose for the new dataset")
+    g.add_argument("--matrix-dir", help="folder with matrix.mtx, barcodes.tsv, features.tsv (plain or .gz)")
+    g.add_argument("--metadata", help="metadata .csv, one row per cell, barcodes in the first column")
+    g.add_argument("--sample-col", default="patientID")
+    g.add_argument("--celltype-col", default="simplified_subtype")
+    g.add_argument("--disease-col", default="disease")
+    g.add_argument("--barcode-col", default=None, help="metadata column holding the barcodes (default: the first column)")
+    g.add_argument("--min-genes", type=int, default=0, help="QC is off unless set")
+    g.add_argument("--max-mt", type=float, default=100.0, help="QC is off unless set")
     a = ap.parse_args()
     t0 = time.time()
+    if a.dataset:
+        if not (a.matrix_dir and a.metadata):
+            ap.error("--dataset needs --matrix-dir and --metadata")
+        units.build_dataset(a.dataset, a.matrix_dir, a.metadata, a.sample_col, a.celltype_col, a.disease_col,
+                            a.barcode_col, a.min_genes, a.max_mt)
+        print(f"done in {time.time()-t0:.0f}s, peak memory {rss():.1f} GB. Files: {os.path.join(units.WORK, a.dataset)}")
+        return
+    if not a.tissue:
+        ap.error("give --tissue blood|skin, or --dataset NAME with --matrix-dir and --metadata")
     if a.tissue == "blood":
         todo = a.units.split(",") if a.units else ALL_LANES
         if not a.index:

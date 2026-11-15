@@ -421,7 +421,7 @@ def extract_modules(C, gene_names, P=None, alpha=0.01, min_ids=0.3, min_size=3,
             from networkx.algorithms.community import greedy_modularity_communities
         except ImportError:
             print("  [extract_modules] networkx not installed; falling back to "
-                  "connected components. `pip install networkx` for method='greedy'.")
+                  "connected components. `python -m pip install networkx` for method='greedy'.")
             method = "components"
 
     def build(members):

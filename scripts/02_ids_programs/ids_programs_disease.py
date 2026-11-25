@@ -31,6 +31,9 @@ cell-type labels (the dataset's own labels), the equivalent of --lineage.
 
   python scripts/02_ids_programs/ids_programs_disease.py --datasets NAME                 # pass 1
   python scripts/02_ids_programs/ids_programs_disease.py --datasets NAME --reuse --min-ids 0.5
+
+Where results go: --out DIR names the folder of one run, so two runs never share a folder.
+--results-dir DIR (the same folder given to build_units.py) moves everything out of the repo.
 """
 import argparse, json, os, sys, time
 import numpy as np, pandas as pd
@@ -43,6 +46,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=None, help="default: the run folder registered in sc_ids/paths.py, "
                                                 "or results/02_ids_programs/ids-<datasets> with --datasets")
+    ap.add_argument("--results-dir", default=None,
+                    help="the folder given to build_units.py --results-dir: datasets are read from <results-dir>/00_units "
+                         "and, unless --out is given, results go to <results-dir>/02_ids_programs/ids-<datasets>")
     ap.add_argument("--datasets", default=None,
                     help="comma-separated dataset names built with build_units.py --dataset; one stratum per "
                          "disease value in each. Default: the six catalogue strata (blood and skin)")
@@ -71,6 +77,7 @@ def main():
     a = ap.parse_args()
     if a.lineage and a.celltypes:
         ap.error("use --lineage (coarse lineages of the catalogue data) or --celltypes (exact labels), not both")
+    ids_root = units.use_results_dir(a.results_dir) if a.results_dir else paths.IDS
     strata = D.dataset_strata(a.datasets.split(",")) if a.datasets else D.STRATA
     which = [t.strip() for t in a.celltypes.split(",")] if a.celltypes else a.lineage
     if a.celltypes:
@@ -82,13 +89,14 @@ def main():
     elif a.datasets:
         if a.celltypes:
             ap.error("--celltypes needs --out, so that runs on different cell types do not overwrite each other")
-        out = os.path.join(paths.IDS, "ids-" + a.datasets.replace(",", "-"))
+        out = os.path.join(ids_root, "ids-" + a.datasets.replace(",", "-"))
     else:
         out = paths.LINEAGE_RUNS[a.lineage] if a.lineage else paths.DISEASE_RUN
     os.makedirs(out, exist_ok=True)
     budget = a.budget if a.budget is not None else float("inf")
     print(f"strata: {', '.join(sorted(strata))}\nwriting to {out}", flush=True)
     json.dump({"datasets": sorted({t for t, _ in strata.values()}), "strata": {k: list(v) for k, v in strata.items()},
+               "units_dir": os.path.abspath(units.WORK),
                "lineage": a.lineage, "celltypes": a.celltypes, "lanes": a.lanes, "n_hvg": a.n_hvg,
                "cell_cap": a.cell_cap, "min_cells": a.min_cells, "min_cells_frac": a.min_cells_frac, "seed": a.seed,
                "norm": a.norm, "curated": not a.no_curated, "min_ids": a.min_ids,

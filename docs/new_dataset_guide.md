@@ -8,7 +8,10 @@ Nothing about the dataset is written in code: we give the folder, the metadata f
 | File                                         | What it must hold                                                                                                                                                                                                                 |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `matrix.mtx`, `barcodes.tsv`, `features.tsv` | One matrix for all samples, 10x layout (genes × cells), raw counts. Plain or `.gz`. `genes.tsv` is accepted in place of `features.tsv`.                                                                                           |
-| `metadata.csv`                               | One row per cell. The barcodes are in the first column (where R's `write.csv` puts row names) and are the same text as in `barcodes.tsv`, including the `-[sample index]` suffix. Three more columns: sample, cell type, disease. |
+| `metadata.csv`                               | One row per cell. The barcodes are in the first column (where R's `write.csv` puts row names) and are the same text as in `barcodes.tsv`, including the `-[sample index]` suffix. Three more columns: sample, cell type, disease. Expected in the same folder as the matrix; `.tsv` and `.txt` (tab-separated) are also accepted. |
+
+If the file names share a prefix (`syn_matrix.mtx`, `syn_barcodes.tsv`, `syn_features.tsv`, `syn_metadata.csv`), give it
+with `--prefix syn_`, or put it at the end of the folder path: `--matrix-dir /path/to/folder/syn_`.
 
 ## The three commands
 
@@ -16,9 +19,8 @@ For a dataset with the sample in `patientID`, the cell type in `simplified_subty
 (PsD, RA, Control). `psd_ra` is a name you choose; it is used for folder and file names.
 
 ```bash
-# 1. Build: one file per patient. No QC.
-python scripts/02_ids_programs/build_units.py --dataset psd_ra \
-    --matrix-dir /path/to/folder --metadata /path/to/folder/metadata.csv \
+# 1. Build: one file per patient. No QC. metadata.csv is read from the same folder.
+python scripts/02_ids_programs/build_units.py --dataset psd_ra --matrix-dir /path/to/folder \
     --sample-col patientID --celltype-col simplified_subtype --disease-col disease
 
 # 2. Find gene programs separately in each disease group (here PsD, RA, Control).
@@ -28,7 +30,31 @@ python scripts/02_ids_programs/ids_programs_disease.py --datasets psd_ra --min-i
 python scripts/02_ids_programs/program_activity.py --run results/02_ids_programs/ids-psd_ra
 ```
 
-The three column names shown are also the defaults, so they can be left out.
+The three column names shown are also the defaults, so they can be left out. If the metadata is somewhere
+else, add `--metadata /other/place/metadata.csv`.
+
+## Where the results go
+
+By default everything is written inside the repo: the dataset to `results/00_units/` and the programs to
+`results/02_ids_programs/ids-psd_ra/`. Two options change that.
+
+| Option | On | What it does |
+|---|---|---|
+| `--results-dir DIR` | steps 1 and 2 | Writes under `DIR` instead of the repo: the dataset to `DIR/00_units/`, the programs to `DIR/02_ids_programs/ids-psd_ra/`. Give the same folder to both steps. |
+| `--out DIR` | step 2 | The folder of this one run. Use a different folder for each run you want to keep, for example one per threshold. Without it, a second run on the same dataset writes into the same folder as the first. |
+
+Step 3 needs neither: `--run` points at a run folder, and the run folder remembers where its dataset is.
+
+```bash
+python scripts/02_ids_programs/build_units.py --dataset psd_ra --matrix-dir /path/to/folder --results-dir /proj/ids
+python scripts/02_ids_programs/ids_programs_disease.py --datasets psd_ra --results-dir /proj/ids \
+    --out /proj/ids/02_ids_programs/psd_ra_minids050 --min-ids 0.5
+python scripts/02_ids_programs/ids_programs_disease.py --datasets psd_ra --results-dir /proj/ids \
+    --out /proj/ids/02_ids_programs/psd_ra_minids045 --min-ids 0.45
+python scripts/02_ids_programs/program_activity.py --run /proj/ids/02_ids_programs/psd_ra_minids050
+```
+
+The dataset is built once and shared by every run. Each run folder holds a `run_config.json` with its settings.
 
 ## What each step writes, and what to check
 
@@ -62,6 +88,8 @@ many groups in `programs_dropped_*` are "too_large". Too high: few programs, mos
 
 A cell's score is the mean log-expression of the program's genes minus the mean of 50 control genes with matched
 expression. "Expressing" means a score above 0; change it with `--cutoff`.
+
+What every column in these files means, and how to read them: [`output_reference.md`](output_reference.md).
 
 ## Optional
 

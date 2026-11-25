@@ -204,20 +204,45 @@ def write_index(tissue, order):
     return c
 
 
-def _find(folder, *names):
+def use_results_dir(results_dir):
+    """Keep the per-sample files under <results_dir>/00_units instead of the repo's results/ folder.
+    Returns the folder program runs go to by default, <results_dir>/02_ids_programs."""
+    global WORK
+    root = os.path.abspath(os.path.expanduser(results_dir))
+    WORK = os.path.join(root, "00_units")
+    os.makedirs(WORK, exist_ok=True)
+    return os.path.join(root, "02_ids_programs")
+
+
+def _find(folder, *names, prefix=""):
     for n in names:
         for ext in ("", ".gz"):
-            if os.path.exists(os.path.join(folder, n + ext)):
-                return os.path.join(folder, n + ext)
-    raise FileNotFoundError(f"{folder}: none of {', '.join(names)} (plain or .gz)")
+            if os.path.exists(os.path.join(folder, prefix + n + ext)):
+                return os.path.join(folder, prefix + n + ext)
+    raise FileNotFoundError(f"{folder}: none of {', '.join(prefix + n for n in names)} (plain or .gz)")
 
 
-def build_dataset(name, matrix_dir, metadata, sample_col="patientID", celltype_col="simplified_subtype",
-                  disease_col="disease", barcode_col=None, min_genes=0, max_mt=100.0):
+def input_folder(matrix_dir, prefix=None):
+    """(folder, file-name prefix). The prefix can be given on its own or as the end of the path:
+    /data/run1 with prefix 'syn_' and /data/run1/syn_ both mean /data/run1/syn_matrix.mtx and so on."""
+    matrix_dir = os.path.expanduser(matrix_dir)
+    if prefix is None and not os.path.isdir(matrix_dir) and os.path.isdir(os.path.dirname(matrix_dir) or "."):
+        return os.path.dirname(matrix_dir) or ".", os.path.basename(matrix_dir)
+    if not os.path.isdir(matrix_dir):
+        raise FileNotFoundError(f"no such folder: {matrix_dir}")
+    return matrix_dir, prefix or ""
+
+
+def build_dataset(name, matrix_dir, metadata=None, sample_col="patientID", celltype_col="simplified_subtype",
+                  disease_col="disease", barcode_col=None, min_genes=0, max_mt=100.0, prefix=None):
     """A new dataset from ONE count matrix plus a metadata table, written as one file per sample.
 
     matrix_dir   folder with matrix.mtx, barcodes.tsv, features.tsv (or genes.tsv); plain or .gz
-    metadata     .csv (or .tsv/.txt, tab-separated), one row per cell. Cells are matched on the exact
+    prefix       text in front of every file name, e.g. 'syn_' for syn_matrix.mtx, syn_barcodes.tsv,
+                 syn_features.tsv, syn_metadata.csv. It can also be written as the end of matrix_dir
+                 (/data/run1/syn_). Default: no prefix
+    metadata     .csv (or .tsv/.txt, tab-separated), one row per cell. Default: metadata.csv (or .tsv/.txt)
+                 in matrix_dir, with the same prefix. Cells are matched on the exact
                  barcode text, e.g. AAACCTGAGAAACCAT-3; the barcodes are expected in `barcode_col`
                  (default: the first column, which is where R's write.csv puts the row names)
     sample_col, celltype_col, disease_col   the three metadata columns the pipeline needs
@@ -232,9 +257,13 @@ def build_dataset(name, matrix_dir, metadata, sample_col="patientID", celltype_c
         raise ValueError(f"'{name}' is reserved for the catalogue data; choose another dataset name")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
         raise ValueError("dataset name: letters, digits, '.', '_' and '-' only (it becomes part of file names)")
+    matrix_dir, prefix = input_folder(matrix_dir, prefix)
+    if metadata is None:
+        metadata = _find(matrix_dir, "metadata.csv", "metadata.tsv", "metadata.txt", prefix=prefix)
+    print(f"[{name}] reading {os.path.join(matrix_dir, prefix)}{{matrix.mtx, barcodes.tsv, features.tsv}} and {metadata}", flush=True)
     # --- small files first, so a wrong column name fails before the slow matrix read
-    ft = pd.read_csv(_find(matrix_dir, "features.tsv", "genes.tsv"), header=None, sep="\t", dtype=str)
-    bc = pd.read_csv(_find(matrix_dir, "barcodes.tsv"), header=None, sep="\t", dtype=str)[0]
+    ft = pd.read_csv(_find(matrix_dir, "features.tsv", "genes.tsv", prefix=prefix), header=None, sep="\t", dtype=str)
+    bc = pd.read_csv(_find(matrix_dir, "barcodes.tsv", prefix=prefix), header=None, sep="\t", dtype=str)[0]
     if bc.duplicated().any():
         raise ValueError(f"barcodes.tsv has {int(bc.duplicated().sum()):,} repeated barcodes, e.g. {bc[bc.duplicated()].iloc[0]}")
     m = pd.read_csv(metadata, sep="\t" if re.search(r"\.(tsv|txt)(\.gz)?$", metadata) else ",", dtype=str)
@@ -269,7 +298,7 @@ def build_dataset(name, matrix_dir, metadata, sample_col="patientID", celltype_c
         import fast_matrix_market as fmm          # seconds
     except ImportError:
         import scipy.io as fmm                    # same result, slower
-    f = _find(matrix_dir, "matrix.mtx")
+    f = _find(matrix_dir, "matrix.mtx", prefix=prefix)
     with (gzip.open(f, "rb") if f.endswith(".gz") else open(f, "rb")) as fh:
         M = fmm.mmread(fh)
     if M.shape == (len(ft), len(bc)):
@@ -303,7 +332,7 @@ def build_dataset(name, matrix_dir, metadata, sample_col="patientID", celltype_c
     print(tab.to_string(), flush=True)
     print(f"  {c.subtype.nunique()} cell types: {', '.join(sorted(c.subtype.unique())[:12])}"
           + (" ..." if c.subtype.nunique() > 12 else ""), flush=True)
-    json.dump({"name": name, "matrix_dir": os.path.abspath(matrix_dir), "metadata": os.path.abspath(metadata),
+    json.dump({"name": name, "matrix_dir": os.path.abspath(matrix_dir), "prefix": prefix, "metadata": os.path.abspath(metadata),
                "columns": {"barcode": bcol, "sample": sample_col, "cell_type": celltype_col, "disease": disease_col},
                "qc": {"min_genes": min_genes, "max_mt": max_mt}, "whole_number_counts": bool(whole),
                "cells_in_matrix": int(len(bc)), "cells_kept": int(len(c)), "genes": int(len(var)),

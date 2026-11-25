@@ -66,6 +66,9 @@ def main():
     ap.add_argument("--programs", default=None, help="CSV with program_id, genes: score these instead of the run's programs")
     ap.add_argument("--datasets", default=None, help="comma-separated; default: the datasets of the run")
     ap.add_argument("--out", default=None, help="default: the run folder")
+    ap.add_argument("--results-dir", default=None,
+                    help="read the datasets from <results-dir>/00_units. Not needed with --run: the run folder "
+                         "remembers where its datasets are")
     ap.add_argument("--cutoff", type=float, default=0.0, help="a cell expresses a program when its score is above this")
     ap.add_argument("--lanes", default="october", choices=["october", "all"], help="blood only: nine October lanes or all 28")
     ap.add_argument("--budget", type=float, default=None)
@@ -86,7 +89,12 @@ def main():
         print(f"{len(det)} detections, {det.distinct_program.nunique()} distinct programs -> detections.csv", flush=True)
     progs = {r.program_id: [g.strip() for g in r.genes.split(",")] for r in det.itertuples()}
     cfg = os.path.join(a.run or "", "run_config.json")
-    names = a.datasets.split(",") if a.datasets else (json.load(open(cfg))["datasets"] if os.path.exists(cfg) else None)
+    cfg = json.load(open(cfg)) if os.path.exists(cfg) else {}
+    if a.results_dir:
+        units.use_results_dir(a.results_dir)
+    elif cfg.get("units_dir") and os.path.isdir(cfg["units_dir"]):
+        units.WORK = cfg["units_dir"]
+    names = a.datasets.split(",") if a.datasets else cfg.get("datasets")
     if not names:
         ap.error("--datasets is needed (the run folder has no run_config.json)")
 

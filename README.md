@@ -137,6 +137,7 @@ Computed separately from the same counts; do not conflate them.
 ## Docs
 
 - `docs/new_dataset_guide.md` — adding a dataset from matrix.mtx + metadata.csv: three commands, outputs, limits
+- `docs/output_reference.md` — what each output file is and what every column means (programs, detections, activity)
 - `docs/data_inventory.md` — the PBMC lanes in use (9 of 28) and what each is for, the unused lanes, skin donors
 - `docs/abstract/abstract_notes.md` — methods, limitations and numbers behind the KSID abstract
 - `docs/notes/agenda1_and_3_results.md` — the cell-type mapping, the program-selection

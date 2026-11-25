@@ -17,9 +17,11 @@ Checkpointed: a unit that already has a file is skipped, so the script can be re
   python scripts/02_ids_programs/build_units.py --tissue skin
   python scripts/02_ids_programs/build_units.py --tissue blood --index      # write cells_/genes_ tables
 
-Any other dataset (one matrix.mtx + barcodes.tsv + features.tsv + a metadata .csv; no QC unless asked):
-  python scripts/02_ids_programs/build_units.py --dataset NAME --matrix-dir DIR --metadata DIR/metadata.csv \
+Any other dataset (one matrix.mtx + barcodes.tsv + features.tsv + metadata.csv in one folder; no QC unless asked):
+  python scripts/02_ids_programs/build_units.py --dataset NAME --matrix-dir DIR \
       --sample-col patientID --celltype-col simplified_subtype --disease-col disease
+  optional: --prefix syn_ (files named syn_matrix.mtx ...), --metadata FILE (if it is elsewhere),
+            --results-dir DIR (write under DIR instead of the repo's results/)
 """
 import argparse, glob, gzip, os, re, sys, time, resource
 import numpy as np, pandas as pd, scipy.sparse as sp
@@ -138,8 +140,13 @@ def main():
     ap.add_argument("--index", action="store_true")
     g = ap.add_argument_group("any other dataset (docs/new_dataset_guide.md)")
     g.add_argument("--dataset", help="a name you choose for the new dataset")
-    g.add_argument("--matrix-dir", help="folder with matrix.mtx, barcodes.tsv, features.tsv (plain or .gz)")
-    g.add_argument("--metadata", help="metadata .csv, one row per cell, barcodes in the first column")
+    g.add_argument("--matrix-dir", help="folder with matrix.mtx, barcodes.tsv, features.tsv (plain or .gz). A file-name "
+                                        "prefix can be added to the end of the path: /data/run1/syn_")
+    g.add_argument("--prefix", default=None, help="text in front of every file name, e.g. syn_ for syn_matrix.mtx")
+    g.add_argument("--metadata", default=None, help="metadata .csv, one row per cell, barcodes in the first column. "
+                                                    "Default: metadata.csv in --matrix-dir (with the same prefix)")
+    g.add_argument("--results-dir", default=None, help="where to write: the dataset goes to <results-dir>/00_units. "
+                                                       "Default: the repo's results/ folder")
     g.add_argument("--sample-col", default="patientID")
     g.add_argument("--celltype-col", default="simplified_subtype")
     g.add_argument("--disease-col", default="disease")
@@ -149,14 +156,16 @@ def main():
     a = ap.parse_args()
     t0 = time.time()
     if a.dataset:
-        if not (a.matrix_dir and a.metadata):
-            ap.error("--dataset needs --matrix-dir and --metadata")
+        if not a.matrix_dir:
+            ap.error("--dataset needs --matrix-dir")
+        if a.results_dir:
+            units.use_results_dir(a.results_dir)
         units.build_dataset(a.dataset, a.matrix_dir, a.metadata, a.sample_col, a.celltype_col, a.disease_col,
-                            a.barcode_col, a.min_genes, a.max_mt)
+                            a.barcode_col, a.min_genes, a.max_mt, prefix=a.prefix)
         print(f"done in {time.time()-t0:.0f}s, peak memory {rss():.1f} GB. Files: {os.path.join(units.WORK, a.dataset)}")
         return
     if not a.tissue:
-        ap.error("give --tissue blood|skin, or --dataset NAME with --matrix-dir and --metadata")
+        ap.error("give --tissue blood|skin, or --dataset NAME with --matrix-dir")
     if a.tissue == "blood":
         todo = a.units.split(",") if a.units else ALL_LANES
         if not a.index:

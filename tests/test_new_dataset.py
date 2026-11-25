@@ -72,6 +72,25 @@ def main():
         os.remove(os.path.join(src, f))
     cz = units.build_dataset("toy_gz", src, os.path.join(src, "metadata.csv"))
     assert cz.equals(c) and abs(units.read_cells("toy_gz", cz) - got).sum() == 0
+    # metadata is found in the data folder by default; a file-name prefix can be an option or the end of the path
+    pre = os.path.join(tmp, "prefixed"); os.makedirs(pre)
+    for f in ("matrix.mtx.gz", "barcodes.tsv.gz", "features.tsv.gz", "metadata.csv"):
+        shutil.copy(os.path.join(src, f), os.path.join(pre, "syn_" + f))
+    for nm, kw in (("toy_default_meta", dict(matrix_dir=src)), ("toy_prefix", dict(matrix_dir=pre, prefix="syn_")),
+                   ("toy_prefix_in_path", dict(matrix_dir=os.path.join(pre, "syn_")))):
+        cx = units.build_dataset(nm, **kw)
+        assert cx.equals(c), nm
+    try:
+        units.build_dataset("toy_missing", pre); raise SystemExit("should have failed")      # no prefix given, so nothing is found
+    except FileNotFoundError as e:
+        assert "metadata.csv" in str(e), e
+    # results in a folder the user chooses
+    mine = os.path.join(tmp, "my results")
+    runs = units.use_results_dir(mine)
+    cy = units.build_dataset("toy_elsewhere", src)
+    assert cy.equals(c) and runs == os.path.join(mine, "02_ids_programs")
+    assert os.path.exists(os.path.join(mine, "00_units", "cells_toy_elsewhere.csv.gz"))
+    assert not os.path.exists(os.path.join(os.environ["SC_IDS_WORK"], "cells_toy_elsewhere.csv.gz"))
     print("new-dataset build: OK")
 
 

@@ -37,10 +37,24 @@ JACCARD = 0.5
 
 def detections(run):
     """All programs of a run folder, with duplicates across strata given one `distinct_program` label."""
-    t = pd.concat([pd.read_csv(f) for f in sorted(glob.glob(os.path.join(run, "programs_*.csv")))
-                   if not os.path.basename(f).startswith("programs_dropped")], ignore_index=True)
+    where = os.path.abspath(run)
+    if not os.path.isdir(run):
+        raise SystemExit(f"--run: no such folder: {where}\n"
+                         "Step 2 prints the folder it writes to ('writing to ...'). Unless --out or --results-dir was given, "
+                         "that is results/02_ids_programs/ids-<dataset> inside the Single-Cell-IDS folder, not inside the "
+                         "folder the command is run from.")
+    files = [f for f in sorted(glob.glob(os.path.join(run, "programs_*.csv")))
+             if not os.path.basename(f).startswith("programs_dropped")]
+    if not files and glob.glob(os.path.join(run, "ids_*.npy")):
+        raise SystemExit(f"{where}: step 2 has computed the IDS values here but has not made the program lists yet.\n"
+                         "Run step 2 again with the same options plus --reuse --min-ids <value>, e.g. --reuse --min-ids 0.5.")
+    if not files:
+        raise SystemExit(f"{where}: no output of step 2 (no programs_*.csv, no ids_*.npy).\n"
+                         "Check the folder: step 2 prints the one it writes to ('writing to ...'). If every disease group "
+                         "was skipped for having under --min-cells cells, there is nothing to score.")
+    t = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
     if t.empty:
-        raise SystemExit(f"{run}: no programs found. Run ids_programs_disease.py with --min-ids first.")
+        raise SystemExit(f"{where}: step 2 found no programs at this threshold. Try a lower one: --reuse --min-ids <value>.")
     t.insert(0, "program_id", t.stratum + "|" + t.program)
     G = [set(x.strip() for x in g.split(",")) for g in t.genes]
     parent = list(range(len(t)))
@@ -77,14 +91,15 @@ def main():
     out = a.out or a.run
     if not out or not (a.run or a.programs):
         ap.error("give --run, or --programs with --datasets and --out")
-    os.makedirs(out, exist_ok=True)
     if a.programs:
         det = pd.read_csv(a.programs)
         if "program_id" not in det.columns:                   # e.g. distinct_programs.csv, whose first column is program_no
             det = det.rename(columns={det.columns[0]: "program_id"})
         det["program_id"] = det.program_id.astype(str)
+        os.makedirs(out, exist_ok=True)
     else:
-        det = detections(a.run)
+        det = detections(a.run)                               # stops with a message if the run folder is not ready
+        os.makedirs(out, exist_ok=True)
         det.to_csv(os.path.join(out, "detections.csv"), index=False)
         print(f"{len(det)} detections, {det.distinct_program.nunique()} distinct programs -> detections.csv", flush=True)
     progs = {r.program_id: [g.strip() for g in r.genes.split(",")] for r in det.itertuples()}
